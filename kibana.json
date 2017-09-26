@@ -1,0 +1,147 @@
+[
+  {
+    "_id": "4d7ce0c0-a281-11e7-b014-d3149cb11f60",
+    "_type": "dashboard",
+    "_source": {
+      "title": "Allen P / Daily email distribution",
+      "hits": 0,
+      "description": "",
+      "panelsJSON": "[{\"col\":1,\"id\":\"ddb1f370-a280-11e7-b014-d3149cb11f60\",\"panelIndex\":1,\"row\":4,\"size_x\":6,\"size_y\":3,\"type\":\"visualization\"},{\"col\":1,\"id\":\"12b1f140-a27e-11e7-b014-d3149cb11f60\",\"panelIndex\":2,\"row\":7,\"size_x\":6,\"size_y\":3,\"type\":\"visualization\"},{\"size_x\":6,\"size_y\":3,\"panelIndex\":3,\"type\":\"visualization\",\"id\":\"30f7ef60-a283-11e7-b014-d3149cb11f60\",\"col\":1,\"row\":1}]",
+      "optionsJSON": "{\"darkTheme\":true}",
+      "uiStateJSON": "{}",
+      "version": 1,
+      "timeRestore": true,
+      "timeTo": "Wed Jun 20 2001 07:13:41 GMT+0200",
+      "timeFrom": "Fri Nov 19 1999 17:14:09 GMT+0100",
+      "refreshInterval": {
+        "display": "Off",
+        "pause": false,
+        "value": 0
+      },
+      "kibanaSavedObjectMeta": {
+        "searchSourceJSON": "{\"filter\":[{\"query\":{\"match_all\":{}}}],\"highlightAll\":true,\"version\":true}"
+      }
+    }
+  },
+  {
+    "_id": "9d6e4430-a267-11e7-bde5-4fc6dd67628e",
+    "_type": "search",
+    "_source": {
+      "title": "Here is our forecast",
+      "description": "",
+      "hits": 0,
+      "columns": [
+        "mailbox_owner",
+        "mail_folder",
+        "headers.Date",
+        "headers.Subject",
+        "headers.To",
+        "headers.X-From",
+        "headers.From",
+        "headers.X-To",
+        "body"
+      ],
+      "sort": [
+        "_score",
+        "desc"
+      ],
+      "version": 1,
+      "kibanaSavedObjectMeta": {
+        "searchSourceJSON": "{\"index\":\"emails\",\"highlightAll\":true,\"version\":true,\"query\":{\"query_string\":{\"query\":\"mailbox_owner:\\\"allen-p\\\" AND headers.From:\\\"phillip.allen@enron.com\\\" AND headers.To:\\\"tim.belden@enron.com\\\" AND body:\\\"Here is our forecast\\\"~\",\"analyze_wildcard\":true}},\"filter\":[]}"
+      }
+    }
+  },
+  {
+    "_id": "3a760760-a270-11e7-bde5-4fc6dd67628e",
+    "_type": "search",
+    "_source": {
+      "title": "allen-p-sent-mail",
+      "description": "",
+      "hits": 0,
+      "columns": [
+        "mailbox_owner",
+        "mail_folder",
+        "headers.Date",
+        "headers.Subject",
+        "headers.To",
+        "headers.X-From",
+        "headers.From",
+        "headers.X-To",
+        "body"
+      ],
+      "sort": [
+        "_score",
+        "desc"
+      ],
+      "version": 1,
+      "kibanaSavedObjectMeta": {
+        "searchSourceJSON": "{\"index\":\"emails\",\"highlightAll\":true,\"version\":true,\"query\":{\"query_string\":{\"query\":\"mailbox_owner:\\\"allen-p\\\" AND mail_folder:\\\"_sent_mail\\\"\",\"analyze_wildcard\":true}},\"filter\":[]}"
+      }
+    }
+  },
+  {
+    "_id": "98c9e010-a280-11e7-b014-d3149cb11f60",
+    "_type": "search",
+    "_source": {
+      "title": "allen-p-inbox-email",
+      "description": "",
+      "hits": 0,
+      "columns": [
+        "headers.From",
+        "headers.To"
+      ],
+      "sort": [
+        "headers.Date",
+        "desc"
+      ],
+      "version": 1,
+      "kibanaSavedObjectMeta": {
+        "searchSourceJSON": "{\"index\":\"emails\",\"highlightAll\":true,\"version\":true,\"query\":{\"query_string\":{\"query\":\"mailbox_owner:\\\"allen-p\\\" AND NOT mail_folder:\\\"all_documents\\\" AND NOT mail_folder:\\\"discussion_threads\\\" AND NOT mail_folder:\\\"sent\\\" AND NOT mail_folder:\\\"sent_items\\\"\",\"analyze_wildcard\":true}},\"filter\":[]}"
+      }
+    }
+  },
+  {
+    "_id": "12b1f140-a27e-11e7-b014-d3149cb11f60",
+    "_type": "visualization",
+    "_source": {
+      "title": "Allen P / Sent per day",
+      "visState": "{\"title\":\"Allen P / Sent per day\",\"type\":\"histogram\",\"params\":{\"grid\":{\"categoryLines\":true,\"style\":{\"color\":\"#eee\"},\"valueAxis\":\"ValueAxis-1\"},\"categoryAxes\":[{\"id\":\"CategoryAxis-1\",\"type\":\"category\",\"position\":\"bottom\",\"show\":true,\"style\":{},\"scale\":{\"type\":\"linear\"},\"labels\":{\"show\":true,\"truncate\":100,\"filter\":false},\"title\":{\"text\":\"Date\"}}],\"valueAxes\":[{\"id\":\"ValueAxis-1\",\"name\":\"LeftAxis-1\",\"type\":\"value\",\"position\":\"left\",\"show\":true,\"style\":{},\"scale\":{\"type\":\"linear\",\"mode\":\"normal\"},\"labels\":{\"show\":true,\"rotate\":0,\"filter\":false,\"truncate\":100},\"title\":{\"text\":\"Sent messages count\"}}],\"seriesParams\":[{\"show\":\"true\",\"type\":\"histogram\",\"mode\":\"normal\",\"data\":{\"label\":\"Sent messages count\",\"id\":\"1\"},\"valueAxis\":\"ValueAxis-1\",\"drawLinesBetweenPoints\":false,\"showCircles\":true}],\"addTooltip\":true,\"addLegend\":true,\"legendPosition\":\"right\",\"times\":[],\"addTimeMarker\":false},\"aggs\":[{\"id\":\"1\",\"enabled\":true,\"type\":\"cardinality\",\"schema\":\"metric\",\"params\":{\"field\":\"headers.Message-ID.keyword\",\"customLabel\":\"Sent messages count\"}},{\"id\":\"2\",\"enabled\":true,\"type\":\"date_histogram\",\"schema\":\"segment\",\"params\":{\"field\":\"headers.Date\",\"interval\":\"d\",\"customInterval\":\"2h\",\"min_doc_count\":1,\"extended_bounds\":{},\"customLabel\":\"Date\"}}],\"listeners\":{}}",
+      "uiStateJSON": "{}",
+      "description": "",
+      "savedSearchId": "3a760760-a270-11e7-bde5-4fc6dd67628e",
+      "version": 1,
+      "kibanaSavedObjectMeta": {
+        "searchSourceJSON": "{\"filter\":[]}"
+      }
+    }
+  },
+  {
+    "_id": "ddb1f370-a280-11e7-b014-d3149cb11f60",
+    "_type": "visualization",
+    "_source": {
+      "title": "Allen P / Inbox per day",
+      "visState": "{\"title\":\"Allen P / Inbox per day\",\"type\":\"histogram\",\"params\":{\"grid\":{\"categoryLines\":false,\"style\":{\"color\":\"#eee\"}},\"categoryAxes\":[{\"id\":\"CategoryAxis-1\",\"type\":\"category\",\"position\":\"bottom\",\"show\":true,\"style\":{},\"scale\":{\"type\":\"linear\"},\"labels\":{\"show\":true,\"truncate\":100},\"title\":{\"text\":\"Date\"}}],\"valueAxes\":[{\"id\":\"ValueAxis-1\",\"name\":\"LeftAxis-1\",\"type\":\"value\",\"position\":\"left\",\"show\":true,\"style\":{},\"scale\":{\"type\":\"linear\",\"mode\":\"normal\"},\"labels\":{\"show\":true,\"rotate\":0,\"filter\":false,\"truncate\":100},\"title\":{\"text\":\"Inbox messages count\"}}],\"seriesParams\":[{\"show\":\"true\",\"type\":\"histogram\",\"mode\":\"stacked\",\"data\":{\"label\":\"Inbox messages count\",\"id\":\"1\"},\"valueAxis\":\"ValueAxis-1\",\"drawLinesBetweenPoints\":true,\"showCircles\":true}],\"addTooltip\":true,\"addLegend\":true,\"legendPosition\":\"right\",\"times\":[],\"addTimeMarker\":false},\"aggs\":[{\"id\":\"1\",\"enabled\":true,\"type\":\"cardinality\",\"schema\":\"metric\",\"params\":{\"field\":\"headers.Message-ID.keyword\",\"customLabel\":\"Inbox messages count\"}},{\"id\":\"2\",\"enabled\":true,\"type\":\"date_histogram\",\"schema\":\"segment\",\"params\":{\"field\":\"headers.Date\",\"interval\":\"d\",\"customInterval\":\"2h\",\"min_doc_count\":1,\"extended_bounds\":{},\"customLabel\":\"Date\"}}],\"listeners\":{}}",
+      "uiStateJSON": "{}",
+      "description": "",
+      "savedSearchId": "98c9e010-a280-11e7-b014-d3149cb11f60",
+      "version": 1,
+      "kibanaSavedObjectMeta": {
+        "searchSourceJSON": "{\"filter\":[]}"
+      }
+    }
+  },
+  {
+    "_id": "30f7ef60-a283-11e7-b014-d3149cb11f60",
+    "_type": "visualization",
+    "_source": {
+      "title": "Allen P / Distribution by folder",
+      "visState": "{\"title\":\"Allen P / Distribution by folder\",\"type\":\"area\",\"params\":{\"grid\":{\"categoryLines\":true,\"style\":{\"color\":\"#eee\"},\"valueAxis\":\"ValueAxis-1\"},\"categoryAxes\":[{\"id\":\"CategoryAxis-1\",\"type\":\"category\",\"position\":\"bottom\",\"show\":true,\"style\":{},\"scale\":{\"type\":\"linear\"},\"labels\":{\"show\":true,\"truncate\":100},\"title\":{\"text\":\"Date\"}}],\"valueAxes\":[{\"id\":\"ValueAxis-1\",\"name\":\"LeftAxis-1\",\"type\":\"value\",\"position\":\"left\",\"show\":true,\"style\":{},\"scale\":{\"type\":\"linear\",\"mode\":\"normal\"},\"labels\":{\"show\":true,\"rotate\":0,\"filter\":false,\"truncate\":100},\"title\":{\"text\":\"Email count\"}}],\"seriesParams\":[{\"show\":\"true\",\"type\":\"area\",\"mode\":\"stacked\",\"data\":{\"label\":\"Email count\",\"id\":\"1\"},\"drawLinesBetweenPoints\":true,\"showCircles\":true,\"interpolate\":\"cardinal\",\"valueAxis\":\"ValueAxis-1\"}],\"addTooltip\":true,\"addLegend\":true,\"legendPosition\":\"right\",\"times\":[],\"addTimeMarker\":false},\"aggs\":[{\"id\":\"1\",\"enabled\":true,\"type\":\"count\",\"schema\":\"metric\",\"params\":{\"customLabel\":\"Email count\"}},{\"id\":\"2\",\"enabled\":true,\"type\":\"date_histogram\",\"schema\":\"segment\",\"params\":{\"field\":\"headers.Date\",\"interval\":\"d\",\"customInterval\":\"2h\",\"min_doc_count\":0,\"extended_bounds\":{},\"customLabel\":\"Date\"}},{\"id\":\"3\",\"enabled\":true,\"type\":\"terms\",\"schema\":\"group\",\"params\":{\"field\":\"mail_folder.keyword\",\"size\":10,\"order\":\"desc\",\"orderBy\":\"1\",\"customLabel\":\"Folders\"}}],\"listeners\":{}}",
+      "uiStateJSON": "{}",
+      "description": "",
+      "version": 1,
+      "kibanaSavedObjectMeta": {
+        "searchSourceJSON": "{\"index\":\"emails\",\"query\":{\"query_string\":{\"query\":\"mailbox_owner:\\\"allen-p\\\"\",\"analyze_wildcard\":true}},\"filter\":[]}"
+      }
+    }
+  }
+]
