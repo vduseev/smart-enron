@@ -59,6 +59,24 @@ def es_connect(aws_access_key, aws_secret_key, region, host):
     return es
 
 
+def convert_date_to_es_format(date_string):
+    # Example from email:
+    # Thu, 2 Nov 2000 08:12:00 -0800 (PST)
+    # Example from ES docs:
+    # yyyy/MM/dd HH:mm:ss Z
+    # First, cut off non standard time zone at the end
+    date_string, _ = date_string.rsplit(' ', 1)
+    date = datetime.datetime.strptime(
+        date_string,
+        '%a, %d %b %Y %H:%M:%S %z'
+    )
+    es_date = datetime.datetime.strftime(
+        date,
+        '%Y/%m/%d %H:%M:%S %z'
+    )
+    return es_date
+
+
 def upload_messages(es, path):
 
     # Initialize email parser
@@ -93,19 +111,9 @@ def upload_messages(es, path):
 
         # Extract mailbox owner name
         mailbox_owner = parts[0]
-        # if mailbox_owner in ['allen-p', 'arora-h']:
-        #     continue
 
         # Extract mail folder name
         mail_folder = os.path.join(parts[1], *parts[2:])
-        # if mail_folder != 'straw':
-        #     continue
-
-        # print('The data:')
-        # print('  root:', root)
-        # print('  owner:', mailbox_owner)
-        # print('  folder:', mail_folder)
-        # print('  messages:')
 
         # Index each email
         for file_name in files:
@@ -122,16 +130,25 @@ def upload_messages(es, path):
                 email['filename'] = file_name
                 # Create headers dictionary and fill it with headers from file
                 email['headers'] = {}
-                for key, value in msg.items():
-                    email['headers'][key] = value
+
+                try:
+                    for key, value in msg.items():
+                        # Convert date to standard ES format
+                        if key == 'Date':
+                            value = convert_date_to_es_format(value)
+
+                        email['headers'][key] = value
+                except ValueError:
+                    continue
 
                 bulk_file += bulk_index_line + '\n'
                 bulk_file += json.dumps(email) + '\n'
-                # print(json.dumps(email, indent=True))
 
                 counter += 1
+
                 if counter % 1000 == 0:
-                    print(es.bulk(bulk_file))
+                    res = es.bulk(bulk_file, timeout='60s')
+                    print('Errors:', res['errors'])
                     bulk_file = ''
                     print(
                         'Uploaded to', counter, 'items',
@@ -141,14 +158,13 @@ def upload_messages(es, path):
                     last_uploaded_count = counter
 
     if counter != last_uploaded_count:
-        print(es.bulk(bulk_file))
-        bulk_file = ''
+        res = es.bulk(bulk_file, timeout='60s')
+        print('Errors:', res['errors'])
         print(
             'Uploaded to', counter, 'items',
             'to', mailbox_owner,
             datetime.datetime.now()
         )
-        last_uploaded_count = counter
 
 
 if __name__ == "__main__":
@@ -167,8 +183,55 @@ if __name__ == "__main__":
         conf.host
     )
 
+    print("Cluster health:")
     print(json.dumps(es.cluster.health(), indent=True))
+
+    index_config = {
+        "mappings": {
+            "email": {
+                "date_detection": True,
+                "dynamic_date_formats": ["yyyy/MM/dd HH:mm:ss Z"]
+            }
+        }
+    }
+
+    es.indices.create(
+        'emails',
+        body=index_config
+    )
+
+    print('Index "emails" is created')
+
+    no_refresh_settings = {
+        "index": {
+            "refresh_interval": "-1"
+        }
+    }
+
+    es.indices.put_settings(
+        body=no_refresh_settings,
+        index='emails'
+    )
+
+    print("Refresh settings are updated")
 
     print('Starting uploading...', datetime.datetime.now())
     upload_messages(es, conf.enron_path)
     print('Finished uploading...', datetime.datetime.now())
+
+    refresh_settings = {
+        "index": {
+            "refresh_interval": "1s"
+        }
+    }
+
+    es.indices.put_settings(
+        body=refresh_settings,
+        index='emails'
+    )
+
+    print("Refresh settings are set back")
+
+    print("Forced merge started...")
+    es.indices.forcemerge(index='emails', max_num_segments=5)
+    print("Forced merge finished")
