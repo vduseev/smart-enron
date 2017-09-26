@@ -6,6 +6,7 @@ from elasticsearch import Elasticsearch, RequestsHttpConnection
 from requests_aws4auth import AWS4Auth
 from pathlib import Path
 import json
+import datetime
 
 
 def parse_arguments():
@@ -58,14 +59,6 @@ def es_connect(aws_access_key, aws_secret_key, region, host):
     return es
 
 
-def index_email_obj(es, email):
-    es.index(
-        index="emails",
-        doc_type="email",
-        body=email
-    )
-
-
 def upload_messages(es, path):
 
     # Initialize email parser
@@ -73,6 +66,18 @@ def upload_messages(es, path):
 
     PREFIX_TRIM_AMOUNT = len(path) + 1
 
+    bulk_file = ''
+    index_definition = {
+        "index": {
+            "_index": "emails",
+            "_type": "email"
+        }
+    }
+    bulk_index_line = json.dumps(index_definition)
+
+    counter = 0
+    mailbox_owner = 'no_owner'
+    last_uploaded_count = 0
     for root, dirs, files in os.walk(path):
         user_directory = root[PREFIX_TRIM_AMOUNT:]
 
@@ -88,19 +93,19 @@ def upload_messages(es, path):
 
         # Extract mailbox owner name
         mailbox_owner = parts[0]
-        if mailbox_owner != 'allen-p':
-            continue
+        # if mailbox_owner in ['allen-p', 'arora-h']:
+        #     continue
 
         # Extract mail folder name
         mail_folder = os.path.join(parts[1], *parts[2:])
         # if mail_folder != 'straw':
         #     continue
 
-        print('The data:')
-        print('  root:', root)
-        print('  owner:', mailbox_owner)
-        print('  folder:', mail_folder)
-        print('  messages:')
+        # print('The data:')
+        # print('  root:', root)
+        # print('  owner:', mailbox_owner)
+        # print('  folder:', mail_folder)
+        # print('  messages:')
 
         # Index each email
         for file_name in files:
@@ -120,9 +125,30 @@ def upload_messages(es, path):
                 for key, value in msg.items():
                     email['headers'][key] = value
 
+                bulk_file += bulk_index_line + '\n'
+                bulk_file += json.dumps(email) + '\n'
+                # print(json.dumps(email, indent=True))
 
-                # index_email_obj(es, email)
-                print(json.dumps(email, indent=True))
+                counter += 1
+                if counter % 1000 == 0:
+                    print(es.bulk(bulk_file))
+                    bulk_file = ''
+                    print(
+                        'Uploaded to', counter, 'items',
+                        'to', mailbox_owner,
+                        datetime.datetime.now()
+                    )
+                    last_uploaded_count = counter
+
+    if counter != last_uploaded_count:
+        print(es.bulk(bulk_file))
+        bulk_file = ''
+        print(
+            'Uploaded to', counter, 'items',
+            'to', mailbox_owner,
+            datetime.datetime.now()
+        )
+        last_uploaded_count = counter
 
 
 if __name__ == "__main__":
@@ -134,13 +160,15 @@ if __name__ == "__main__":
     conf = parse_config(args.config_path)
 
     # Connect to ElasticSearch
-    # es = es_connect(
-    #     conf.aws_access_key,
-    #     conf.aws_secret_key,
-    #     conf.region,
-    #     conf.host
-    # )
-    #
-    # print(es.cluster.health())
+    es = es_connect(
+        conf.aws_access_key,
+        conf.aws_secret_key,
+        conf.region,
+        conf.host
+    )
 
-    upload_messages(None, conf.enron_path)
+    print(json.dumps(es.cluster.health(), indent=True))
+
+    print('Starting uploading...', datetime.datetime.now())
+    upload_messages(es, conf.enron_path)
+    print('Finished uploading...', datetime.datetime.now())
