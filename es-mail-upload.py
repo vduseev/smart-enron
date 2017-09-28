@@ -1,12 +1,12 @@
 import os
+import json
+import datetime
 import argparse
 import configparser
 from email.parser import Parser
 from elasticsearch import Elasticsearch, RequestsHttpConnection
 from requests_aws4auth import AWS4Auth
 from pathlib import Path
-import json
-import datetime
 
 
 def parse_arguments():
@@ -20,6 +20,12 @@ def parse_arguments():
         default='config.ini',
         help='path to config file'
     )
+    parser.add_argument(
+        '-d', '--dataset',
+        dest='dataset_path',
+        default='maildir',
+        help='path to Enron email dataset dir'
+    )
 
     arguments = parser.parse_args()
     return arguments
@@ -29,10 +35,6 @@ def parse_config(config_path):
     # Read config file
     config = configparser.ConfigParser()
     config.read(config_path)
-
-    # Read Dataset properties
-    enron_path = config['PATHS']['enron_dataset_path']
-    setattr(config, 'enron_path', enron_path)
 
     # Read AWS properties
     aws_access_key = config['AWS']['AWS_ACCESS_KEY']
@@ -47,7 +49,7 @@ def parse_config(config_path):
     return config
 
 
-def es_connect(aws_access_key, aws_secret_key, region, host):
+def aws_connect(aws_access_key, aws_secret_key, region, host):
     aws_auth = AWS4Auth(aws_access_key, aws_secret_key, region, 'es')
     es = Elasticsearch(
         hosts=[{'host': host, 'port': 443}],
@@ -176,7 +178,7 @@ if __name__ == "__main__":
     conf = parse_config(args.config_path)
 
     # Connect to ElasticSearch
-    es = es_connect(
+    es = aws_connect(
         conf.aws_access_key,
         conf.aws_secret_key,
         conf.region,
@@ -216,7 +218,7 @@ if __name__ == "__main__":
     print("Refresh settings are updated")
 
     print('Starting uploading...', datetime.datetime.now())
-    upload_messages(es, conf.enron_path)
+    upload_messages(es, args.dataset_path)
     print('Finished uploading...', datetime.datetime.now())
 
     refresh_settings = {
