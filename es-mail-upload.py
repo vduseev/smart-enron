@@ -1,12 +1,11 @@
 import os
 import json
-import datetime
 import argparse
 import configparser
-from email.parser import Parser
-from elasticsearch import Elasticsearch, RequestsHttpConnection
-from requests_aws4auth import AWS4Auth
 from pathlib import Path
+from datetime import datetime
+from email.parser import Parser
+from elasticsearch_api import ElasticSearchAPI
 
 
 def parse_arguments():
@@ -46,19 +45,26 @@ def parse_config(config_path):
     setattr(config, 'region', region)
     setattr(config, 'host', host)
 
+    # Read Elastic Search index parameters
+    index_name = config['ELASTICSEARCH']['INDEX_NAME']
+    index_config = config['ELASTICSEARCH']['INDEX_CONFIG']
+    bulk_index_def = config['ELASTICSEARCH']['BULK_INDEX_DEFINITION']
+    bulk_count = config['ELASTICSEARCH']['BULK_COUNT']
+    timeout = config['ELASTICSEARCH']['TIMEOUT']
+    # Parse JSON config values
+    index_config = json.loads(index_config)
+    bulk_index_def = json.loads(bulk_index_def)
+    setattr(config, 'index_name', index_name)
+    setattr(config, 'index_config', index_config)
+    setattr(config, 'bulk_index_def', bulk_index_def)
+    setattr(config, 'bulk_count', bulk_count)
+    setattr(config, 'timeout', timeout)
+
+    # Read dataset specific business rules
+    email_encoding = config['ENRON']['ENCODING']
+    setattr(config, 'email_encoding', email_encoding)
+
     return config
-
-
-def aws_connect(aws_access_key, aws_secret_key, region, host):
-    aws_auth = AWS4Auth(aws_access_key, aws_secret_key, region, 'es')
-    es = Elasticsearch(
-        hosts=[{'host': host, 'port': 443}],
-        http_auth=aws_auth,
-        use_ssl=True,
-        verify_certs=True,
-        connection_class=RequestsHttpConnection
-    )
-    return es
 
 
 def convert_date_to_es_format(date_string):
@@ -68,18 +74,25 @@ def convert_date_to_es_format(date_string):
     # yyyy/MM/dd HH:mm:ss Z
     # First, cut off non standard time zone at the end
     date_string, _ = date_string.rsplit(' ', 1)
-    date = datetime.datetime.strptime(
+    date = datetime.strptime(
         date_string,
         '%a, %d %b %Y %H:%M:%S %z'
     )
-    es_date = datetime.datetime.strftime(
+    es_date = datetime.strftime(
         date,
         '%Y/%m/%d %H:%M:%S %z'
     )
     return es_date
 
 
-def upload_messages(es, path):
+def upload_messages(
+        es,
+        path,
+        bulk_index_def,
+        bulk_count,
+        email_encoding,
+        timeout
+):
 
     # Initialize email parser
     email_parser = Parser()
@@ -87,13 +100,7 @@ def upload_messages(es, path):
     PREFIX_TRIM_AMOUNT = len(path) + 1
 
     bulk_file = ''
-    index_definition = {
-        "index": {
-            "_index": "emails",
-            "_type": "email"
-        }
-    }
-    bulk_index_line = json.dumps(index_definition)
+    bulk_index_line = json.dumps(bulk_index_def)
 
     counter = 0
     mailbox_owner = 'no_owner'
@@ -121,7 +128,7 @@ def upload_messages(es, path):
         for file_name in files:
             file_path = os.path.join(root, file_name)
 
-            with open(file_path, mode='r', encoding='cp1252') as msg_file:
+            with open(file_path, mode='r', encoding=email_encoding) as msg_file:
                 msg = email_parser.parse(msg_file)
 
                 # Message Id will be generated automatically by ElasticSearch
@@ -148,24 +155,24 @@ def upload_messages(es, path):
 
                 counter += 1
 
-                if counter % 1000 == 0:
-                    res = es.bulk(bulk_file, timeout='60s')
+                if counter % bulk_count == 0:
+                    res = es.bulk(bulk_file, timeout=timeout)
                     print('Errors:', res['errors'])
                     bulk_file = ''
                     print(
                         'Uploaded to', counter, 'items',
                         'to', mailbox_owner,
-                        datetime.datetime.now()
+                        datetime.now()
                     )
                     last_uploaded_count = counter
 
     if counter != last_uploaded_count:
-        res = es.bulk(bulk_file, timeout='60s')
+        res = es.bulk(bulk_file, timeout=timeout)
         print('Errors:', res['errors'])
         print(
             'Uploaded to', counter, 'items',
             'to', mailbox_owner,
-            datetime.datetime.now()
+            datetime.now()
         )
 
 
@@ -178,7 +185,8 @@ if __name__ == "__main__":
     conf = parse_config(args.config_path)
 
     # Connect to ElasticSearch
-    es = aws_connect(
+    api = ElasticSearchAPI()
+    api.connect(
         conf.aws_access_key,
         conf.aws_secret_key,
         conf.region,
@@ -186,54 +194,28 @@ if __name__ == "__main__":
     )
 
     print("Cluster health:")
-    print(json.dumps(es.cluster.health(), indent=True))
+    print(json.dumps(api.get_cluster_health(), indent=True))
 
-    index_config = {
-        "mappings": {
-            "email": {
-                "date_detection": True,
-                "dynamic_date_formats": ["yyyy/MM/dd HH:mm:ss Z"]
-            }
-        }
-    }
-
-    es.indices.create(
-        'emails',
-        body=index_config
-    )
-
+    api.create_index(conf.index_name, conf.index_config)
     print('Index "emails" is created')
 
-    no_refresh_settings = {
-        "index": {
-            "refresh_interval": "-1"
-        }
-    }
-
-    es.indices.put_settings(
-        body=no_refresh_settings,
-        index='emails'
-    )
-
+    api.set_index_refresh(conf.index_name, ElasticSearchAPI.NO_REFRESH)
     print("Refresh settings are updated")
 
-    print('Starting uploading...', datetime.datetime.now())
-    upload_messages(es, args.dataset_path)
-    print('Finished uploading...', datetime.datetime.now())
-
-    refresh_settings = {
-        "index": {
-            "refresh_interval": "1s"
-        }
-    }
-
-    es.indices.put_settings(
-        body=refresh_settings,
-        index='emails'
+    print('Starting uploading...', datetime.now())
+    upload_messages(
+        es=api.es,
+        path=args.dataset_path,
+        bulk_index_def=conf.bulk_index_def,
+        bulk_count=conf.bulk_count,
+        email_encoding=conf.email_encoding,
+        timeout=conf.timeout
     )
+    print('Finished uploading...', datetime.now())
 
+    api.set_index_refresh(conf.index_name, ElasticSearchAPI.STANDARD_REFRESH)
     print("Refresh settings are set back")
 
     print("Forced merge started...")
-    es.indices.forcemerge(index='emails', max_num_segments=5)
+    api.force_merge(index_name=conf.index_name)
     print("Forced merge finished")
