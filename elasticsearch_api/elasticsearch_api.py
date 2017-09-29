@@ -11,6 +11,7 @@ class ElasticSearchAPI:
         self.host = ''
         self.http_auth = None
         self.es = None
+        self.timeout = '60s'
 
     def connect(self, aws_access_key, aws_secret_key, region, host):
         self.http_auth = AWS4Auth(
@@ -49,3 +50,6 @@ class ElasticSearchAPI:
 
     def get_cluster_health(self):
         return self.es.cluser.healt()
+
+    def bulk(self, bulk_file):
+        return self.es.bulk(self.timeout)

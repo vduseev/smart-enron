@@ -1,11 +1,9 @@
-import os
 import json
 import argparse
 import configparser
-from pathlib import Path
 from datetime import datetime
-from email.parser import Parser
 from elasticsearch_api import ElasticSearchAPI
+from enron_email import EmailParser
 
 
 def parse_arguments():
@@ -49,7 +47,7 @@ def parse_config(config_path):
     index_name = config['ELASTICSEARCH']['INDEX_NAME']
     index_config = config['ELASTICSEARCH']['INDEX_CONFIG']
     bulk_index_def = config['ELASTICSEARCH']['BULK_INDEX_DEFINITION']
-    bulk_count = config['ELASTICSEARCH']['BULK_COUNT']
+    bulk_size = config['ELASTICSEARCH']['BULK_SIZE']
     timeout = config['ELASTICSEARCH']['TIMEOUT']
     # Parse JSON config values
     index_config = json.loads(index_config)
@@ -57,7 +55,7 @@ def parse_config(config_path):
     setattr(config, 'index_name', index_name)
     setattr(config, 'index_config', index_config)
     setattr(config, 'bulk_index_def', bulk_index_def)
-    setattr(config, 'bulk_count', bulk_count)
+    setattr(config, 'bulk_size', bulk_size)
     setattr(config, 'timeout', timeout)
 
     # Read dataset specific business rules
@@ -67,113 +65,24 @@ def parse_config(config_path):
     return config
 
 
-def convert_date_to_es_format(date_string):
-    # Example from email:
-    # Thu, 2 Nov 2000 08:12:00 -0800 (PST)
-    # Example from ES docs:
-    # yyyy/MM/dd HH:mm:ss Z
-    # First, cut off non standard time zone at the end
-    date_string, _ = date_string.rsplit(' ', 1)
-    date = datetime.strptime(
-        date_string,
-        '%a, %d %b %Y %H:%M:%S %z'
-    )
-    es_date = datetime.strftime(
-        date,
-        '%Y/%m/%d %H:%M:%S %z'
-    )
-    return es_date
-
-
-def upload_messages(
-        es,
-        path,
-        bulk_index_def,
-        bulk_count,
-        email_encoding,
-        timeout
-):
-
-    # Initialize email parser
-    email_parser = Parser()
-
-    PREFIX_TRIM_AMOUNT = len(path) + 1
-
+def pack_emails_into_bulks(path, encoding, bulk_index_def, bulk_size):
+    parser = EmailParser(encoding)
     bulk_file = ''
     bulk_index_line = json.dumps(bulk_index_def)
 
     counter = 0
-    mailbox_owner = 'no_owner'
-    last_uploaded_count = 0
-    for root, dirs, files in os.walk(path):
-        user_directory = root[PREFIX_TRIM_AMOUNT:]
+    for email in parser.walk(path):
+        bulk_file += bulk_index_line + '\n'
+        bulk_file += json.dumps(email) + '\n'
+        counter += 1
+        if counter % bulk_size == 0:
+            yield bulk_file, counter
+            bulk_file = ''
 
-        # Split user_directory and sub directories into parts
-        parts = Path(user_directory).parts
+    # yield last portion
+    if bulk_file:
+        yield bulk_file, counter
 
-        # Ignore rows without sub folder
-        # parts[0] is guaranteed to be a mailbox owner name
-        # parts[1] exists when os.walk steps into user directory
-        # and contains mail folders
-        if len(parts) < 2:
-            continue
-
-        # Extract mailbox owner name
-        mailbox_owner = parts[0]
-
-        # Extract mail folder name
-        mail_folder = os.path.join(parts[1], *parts[2:])
-
-        # Index each email
-        for file_name in files:
-            file_path = os.path.join(root, file_name)
-
-            with open(file_path, mode='r', encoding=email_encoding) as msg_file:
-                msg = email_parser.parse(msg_file)
-
-                # Message Id will be generated automatically by ElasticSearch
-                email = {}
-                email['body'] = msg.get_payload()
-                email['mail_folder'] = mail_folder
-                email['mailbox_owner'] = mailbox_owner
-                email['filename'] = file_name
-                # Create headers dictionary and fill it with headers from file
-                email['headers'] = {}
-
-                try:
-                    for key, value in msg.items():
-                        # Convert date to standard ES format
-                        if key == 'Date':
-                            value = convert_date_to_es_format(value)
-
-                        email['headers'][key] = value
-                except ValueError:
-                    continue
-
-                bulk_file += bulk_index_line + '\n'
-                bulk_file += json.dumps(email) + '\n'
-
-                counter += 1
-
-                if counter % bulk_count == 0:
-                    res = es.bulk(bulk_file, timeout=timeout)
-                    print('Errors:', res['errors'])
-                    bulk_file = ''
-                    print(
-                        'Uploaded to', counter, 'items',
-                        'to', mailbox_owner,
-                        datetime.now()
-                    )
-                    last_uploaded_count = counter
-
-    if counter != last_uploaded_count:
-        res = es.bulk(bulk_file, timeout=timeout)
-        print('Errors:', res['errors'])
-        print(
-            'Uploaded to', counter, 'items',
-            'to', mailbox_owner,
-            datetime.now()
-        )
 
 
 if __name__ == "__main__":
@@ -186,6 +95,7 @@ if __name__ == "__main__":
 
     # Connect to ElasticSearch
     api = ElasticSearchAPI()
+    api.timeout = conf.timeout
     api.connect(
         conf.aws_access_key,
         conf.aws_secret_key,
@@ -202,15 +112,15 @@ if __name__ == "__main__":
     api.set_index_refresh(conf.index_name, ElasticSearchAPI.NO_REFRESH)
     print("Refresh settings are updated")
 
-    print('Starting uploading...', datetime.now())
-    upload_messages(
-        es=api.es,
-        path=args.dataset_path,
-        bulk_index_def=conf.bulk_index_def,
-        bulk_count=conf.bulk_count,
-        email_encoding=conf.email_encoding,
-        timeout=conf.timeout
-    )
+    print('Started uploading...', datetime.now())
+    for bulk in pack_emails_into_bulks(
+        args.dataset_path,
+        conf.email_encoding,
+        conf.bulk_index_def,
+        conf.bulk_size
+    ):
+        resp, amount = api.bulk(bulk)
+        print(amount, 'emails uploaded.', 'Errors:', resp['errors'])
     print('Finished uploading...', datetime.now())
 
     api.set_index_refresh(conf.index_name, ElasticSearchAPI.STANDARD_REFRESH)
