@@ -2,7 +2,7 @@ import json
 import argparse
 import configparser
 from datetime import datetime
-from elasticsearch_api import ElasticSearchAPI
+from elasticsearch_api import ElasticSearchAPI, BulkGenerator
 from enron_email import EmailParser
 
 
@@ -33,56 +33,15 @@ def parse_config(config_path):
     config = configparser.ConfigParser()
     config.read(config_path)
 
-    # Read AWS properties
-    aws_access_key = config['AWS']['AWS_ACCESS_KEY']
-    aws_secret_key = config['AWS']['AWS_SECRET_KEY']
-    region = config['AWS']['REGION']
-    host = config['AWS']['HOST']
-    setattr(config, 'aws_access_key', aws_access_key)
-    setattr(config, 'aws_secret_key', aws_secret_key)
-    setattr(config, 'region', region)
-    setattr(config, 'host', host)
-
     # Read Elastic Search index parameters
-    index_name = config['ELASTICSEARCH']['INDEX_NAME']
-    index_config = config['ELASTICSEARCH']['INDEX_CONFIG']
-    bulk_index_def = config['ELASTICSEARCH']['BULK_INDEX_DEFINITION']
-    bulk_size = config['ELASTICSEARCH']['BULK_SIZE']
-    timeout = config['ELASTICSEARCH']['TIMEOUT']
+    index_config = config['ES']['INDEX_CONFIG']
+    bulk_index_def = config['ES']['BULK_INDEX_DEFINITION']
+    config['ES']['BULK_SIZE'] = int(config['ES']['BULK_SIZE'])
     # Parse JSON config values
-    index_config = json.loads(index_config)
-    bulk_index_def = json.loads(bulk_index_def)
-    setattr(config, 'index_name', index_name)
-    setattr(config, 'index_config', index_config)
-    setattr(config, 'bulk_index_def', bulk_index_def)
-    setattr(config, 'bulk_size', bulk_size)
-    setattr(config, 'timeout', timeout)
-
-    # Read dataset specific business rules
-    email_encoding = config['ENRON']['ENCODING']
-    setattr(config, 'email_encoding', email_encoding)
+    config['ES']['INDEX_CONFIG'] = json.loads(index_config)
+    config['ES']['BULK_INDEX_DEFINITION'] = json.loads(bulk_index_def)
 
     return config
-
-
-def pack_emails_into_bulks(path, encoding, bulk_index_def, bulk_size):
-    parser = EmailParser(encoding)
-    bulk_file = ''
-    bulk_index_line = json.dumps(bulk_index_def)
-
-    counter = 0
-    for email in parser.walk(path):
-        bulk_file += bulk_index_line + '\n'
-        bulk_file += json.dumps(email) + '\n'
-        counter += 1
-        if counter % bulk_size == 0:
-            yield bulk_file, counter
-            bulk_file = ''
-
-    # yield last portion
-    if bulk_file:
-        yield bulk_file, counter
-
 
 
 if __name__ == "__main__":
@@ -95,37 +54,45 @@ if __name__ == "__main__":
 
     # Connect to ElasticSearch
     api = ElasticSearchAPI()
-    api.timeout = conf.timeout
+    api.timeout = conf['ES']['TIMEOUT']
     api.connect(
-        conf.aws_access_key,
-        conf.aws_secret_key,
-        conf.region,
-        conf.host
+        conf['AWS']['AWS_ACCESS_KEY'],
+        conf['AWS']['AWS_SECRET_KEY'],
+        conf['AWS']['REGION'],
+        conf['AWS']['HOST']
     )
 
     print("Cluster health:")
     print(json.dumps(api.get_cluster_health(), indent=True))
 
-    api.create_index(conf.index_name, conf.index_config)
+    api.create_index(conf['ES']['INDEX_NAME'], conf['ES']['INDEX_CONFIG'])
     print('Index "emails" is created')
 
-    api.set_index_refresh(conf.index_name, ElasticSearchAPI.NO_REFRESH)
+    api.set_refresh_rate(
+        conf['ES']['INDEX_NAME'],
+        ElasticSearchAPI.NO_REFRESH
+    )
     print("Refresh settings are updated")
 
     print('Started uploading...', datetime.now())
-    for bulk in pack_emails_into_bulks(
-        args.dataset_path,
-        conf.email_encoding,
-        conf.bulk_index_def,
-        conf.bulk_size
-    ):
-        resp, amount = api.bulk(bulk)
-        print(amount, 'emails uploaded.', 'Errors:', resp['errors'])
+    email_parser = EmailParser(email_file_encoding=conf['ENRON']['ENCODING'])
+    bulk_generator = BulkGenerator(
+        bulk_index_definition=conf['ES']['BULK_INDEX_DEFINITION'],
+        bulk_size=conf['ES']['BULK_SIZE'],
+        item_generator=email_parser.walk(args.dataset_path)
+    )
+
+    for bulk in bulk_generator.generate():
+        resp = api.upload_bulk(bulk)
+        print(bulk.size, 'emails uploaded.', 'Errors:', resp['errors'])
     print('Finished uploading...', datetime.now())
 
-    api.set_index_refresh(conf.index_name, ElasticSearchAPI.STANDARD_REFRESH)
+    api.set_refresh_rate(
+        conf['ES']['INDEX_NAME'],
+        ElasticSearchAPI.STANDARD_REFRESH
+    )
     print("Refresh settings are set back")
 
     print("Forced merge started...")
-    api.force_merge(index_name=conf.index_name)
+    api.force_merge(index_name=conf['ES']['INDEX_NAME'])
     print("Forced merge finished")

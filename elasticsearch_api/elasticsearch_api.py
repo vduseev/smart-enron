@@ -36,7 +36,7 @@ class ElasticSearchAPI:
             body=index_config
         )
 
-    def set_index_refresh(self, index_name, value):
+    def set_refresh_rate(self, index_name, value):
         self.es.indices.put_settings(
             index=index_name,
             body=value
@@ -51,5 +51,5 @@ class ElasticSearchAPI:
     def get_cluster_health(self):
         return self.es.cluser.healt()
 
-    def bulk(self, bulk_file):
-        return self.es.bulk(self.timeout)
+    def upload_bulk(self, bulk):
+        return self.es.bulk(bulk.contents, self.timeout)

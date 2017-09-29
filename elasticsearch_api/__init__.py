@@ -1,1 +1,3 @@
-from elasticsearch_api.elasticsearch_api import *
+from elasticsearch_api.elasticsearch_api import ElasticSearchAPI
+from elasticsearch_api.bulk import Bulk
+from elasticsearch_api.bulk_generator import BulkGenerator

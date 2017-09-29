@@ -5,8 +5,8 @@ from pathlib import Path
 
 
 class EmailParser:
-    def __init__(self, encoding):
-        self.encoding = encoding
+    def __init__(self, email_file_encoding):
+        self.encoding = email_file_encoding
         self._parser = Parser()
 
     def walk(self, path):
